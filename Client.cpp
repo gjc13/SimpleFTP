@@ -35,27 +35,59 @@ void Client::connect()
         fflush(stdout);
         fgets(input, 1000, stdin); 
         input[DATA_SIZE] = 0;
+        clear_input(input);
         char command[DATA_SIZE + 1];
         int numRead = sscanf(input, "%s", command);
+        int ftp_command;
         if(!strcmp(command, "help"))
         {
-            handle_help();
+            ftp_command = FTP_HELP;
+            robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
+            handle_show();
         }
         else if(!strcmp(command, "ls"))
         {
+            ftp_command = FTP_LS;
+            robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
             handle_ls(input + strlen(command));
+        }
+        else if(!strcmp(command, "pwd"))
+        {
+            ftp_command = FTP_PWD;
+            robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
+            handle_show();
+        }
+        else if(!strcmp(command, "cd"))
+        {
+            ftp_command = FTP_CD;
+            robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
+            robust_writen(data_fd, input + strlen(command), DATA_SIZE);
+            printf("cd: ");
+            handle_show();
+        }
+        else if(!strcmp(command, "quit"))
+        {
+            ftp_command = FTP_EXIT;
+            robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
+            break;
         }
         fflush(stdin);
     }
-    close(data_listen_fd);
+    shutdown(data_listen_fd, SHUT_RDWR);
 }
 
-int Client::handle_help()
+int Client::handle_show()
 {
     char help_text[DATA_SIZE];
     int command = FTP_HELP;
-    robust_writen(command_fd, &command, sizeof(command));
-    if(robust_readn(data_fd, help_text, DATA_SIZE) >= 0)
+    int reply;
+    robust_readn(command_fd, &reply, sizeof(reply));
+    if(reply != REQ_OK)
+    {
+        err_common(reply);
+        return -1;
+    }
+    else if(robust_readn(data_fd, help_text, DATA_SIZE) >= 0)
     {
         printf("%s\n", help_text);
         return 0;
@@ -66,9 +98,7 @@ int Client::handle_help()
 int Client::handle_ls(const char * command_str)
 {
     char buf[DATA_SIZE];
-    int ftp_command = FTP_LS;
     int reply;
-    robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
     robust_writen(data_fd, (void *)command_str, DATA_SIZE);
     robust_readn(command_fd, &reply, sizeof(reply));
     if(reply == REQ_OK)
@@ -110,8 +140,17 @@ void Client::err_common(int reply)
     }
 }
 
+void Client::clear_input(char * input)
+{
+    while(*input)
+    {
+        if(*input == '\n') *input = 0;
+        input++;
+    }
+}
+
 Client::~Client()
 {
-    if(command_fd != -1) close(command_fd);
-    if(data_fd != -1) close(data_fd);
+    if(command_fd != -1) shutdown(command_fd, SHUT_RDWR);
+    if(data_fd != -1) shutdown(data_fd, SHUT_RDWR);
 }

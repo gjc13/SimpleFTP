@@ -7,6 +7,7 @@
 #define FTP_CD (3)
 #define FTP_GET (4)
 #define FTP_PUT (5)
+#define FTP_EXIT (6)
 
 #define REQ_DENY (403)
 #define REQ_UNFOUND (404)

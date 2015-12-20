@@ -17,7 +17,8 @@ public:
     ~Client();
 private:
     const char * server_name;
-    int handle_help();
+    void clear_input(char * input);
+    int handle_show();
     int handle_ls(const char * command);
     void err_common(int reply);
     unsigned short server_port;
