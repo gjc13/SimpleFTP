@@ -6,18 +6,21 @@
 #define SIMPLEFTP_CLIENT_H
 
 #include "net_helper.h"
+#include <vector>
 
 class Client
 {
 
 public:
-    Client(const char * hostname, int port);
+    Client(const char * hostname, unsigned short port);
     void connect();
     ~Client();
 private:
     const char * server_name;
-    int server_port;
+    int handle_help();
+    unsigned short server_port;
     int command_fd;
+    int data_fd;
 };
 
 

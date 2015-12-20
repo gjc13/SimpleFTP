@@ -5,11 +5,23 @@
 #include <cstdio>
 #include "Server.h"
 
-bool is_stopped = false;
 
 int main(int argc, const char * argv[])
 {
-    Server server(1574);
-    server.run();
+    try
+    {
+        int port = 1574;
+        if(argc == 2)
+        {
+            sscanf(argv[1], "%d\n", &port);
+        }
+        printf("Server running on port %d\n", port);
+        Server server(port);
+        server.run();
+    }
+    catch(std::exception & e)
+    {
+        printf("%s\n", e.what());
+    }
     return 0;
 }

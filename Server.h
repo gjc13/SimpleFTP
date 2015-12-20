@@ -12,19 +12,19 @@ class Server
 public:
     Server();
 
-    Server(int port_num);
+    Server(unsigned short port_num);
 
     void run();
 
     void stop();
 
+    ~Server();
 private:
     void handle_link(const SA_in & client_addr);
-
-    ~Server();
+    void connect_data(const char * remote_client);
 
     bool is_daemon;
-    int port;
+    unsigned short port;
     int listen_fd;
     int command_fd;
     int data_fd;

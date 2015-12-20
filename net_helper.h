@@ -27,8 +27,10 @@ private:
     const char *message;
 };
 
-int connect_sock_fd(const char *hostname, int port);
-int listen_sock_fd(int & port);
+int connect_sock_fd(const char *hostname, unsigned short port);
+int listen_sock_fd(unsigned short & port);
+int robust_readn(int fd, void * buf, unsigned n);
+int robust_writen(int fd, void * buf, unsigned n);
 
 #endif //SIMPLEFTP_NET_HELPER_H
 

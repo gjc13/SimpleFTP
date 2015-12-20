@@ -9,7 +9,13 @@ int main(int argc, const char *argv[])
 {
     try
     {
-        Client client("127.0.0.1", 1574);
+        int port = 1574;
+        if(argc == 2)
+        {
+            sscanf(argv[1], "%d", &port);
+        }
+        printf("port %d\n", port);
+        Client client("localhost", port);
         client.connect();
     }
     catch (std::exception &e)

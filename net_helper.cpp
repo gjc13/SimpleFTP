@@ -9,8 +9,11 @@
 #include <netinet/in.h>
 #include <cstring>
 #include <arpa/inet.h>
+#include <unistd.h>
+#include <errno.h>
+#include <cstdio>
 
-int connect_sock_fd(const char *hostname, int port)
+int connect_sock_fd(const char *hostname, unsigned short port)
 {
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd < 0)
@@ -20,7 +23,7 @@ int connect_sock_fd(const char *hostname, int port)
     struct hostent *hp = gethostbyname(hostname);
     if (hp == nullptr)
     {
-        throw new SockException("Unkown host");
+        throw SockException("Unkown host");
     }
     SA_in addr;
     memset((void *) &addr, 0, sizeof(sockaddr_in));
@@ -34,7 +37,7 @@ int connect_sock_fd(const char *hostname, int port)
     return sock_fd;
 }
 
-int listen_sock_fd(int & port)
+int listen_sock_fd(unsigned short & port)
 {
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd < 0)
@@ -57,8 +60,41 @@ int listen_sock_fd(int & port)
         {
             throw SockException("Get socket port for random select failed!");
         }
-        port = addr.sin_port;
+        port = ntohs(addr.sin_port);
+    }
+
+    if (listen(sock_fd, 1024) < 0)
+    {
+        throw SockException("listen failed");
     }
     return sock_fd;
 }
 
+int robust_readn(int fd, void * buf, unsigned n)
+{
+    int num_left = n;
+    char * bufp = (char *)buf;
+    while(num_left > 0)
+    {
+        int nowread = read(fd, bufp, num_left);
+        if(nowread < 0) return -1;
+        if(nowread == 0) break; //EOF
+        num_left -= nowread;
+        bufp += nowread;
+    }
+    return int(n - num_left);
+}
+
+int robust_writen(int fd, void * buf, unsigned n)
+{
+    int num_left = n;
+    char * bufp = (char *)buf;
+    while(num_left > 0)
+    {
+        int nowread = write(fd, bufp, num_left);
+        if(nowread < 0) return -1;
+        num_left -= nowread;
+        bufp += nowread;
+    }
+    return int(n - num_left);
+}
