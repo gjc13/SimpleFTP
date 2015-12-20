@@ -18,6 +18,8 @@ public:
 private:
     const char * server_name;
     int handle_help();
+    int handle_ls(const char * command);
+    void err_common(int reply);
     unsigned short server_port;
     int command_fd;
     int data_fd;

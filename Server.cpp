@@ -12,12 +12,16 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <cstring>
+#include <string>
 #include "definitions.h"
+#include "fs_helper.h"
+#include <cctype>
+
+using std::string;
 
 static char help_text[DATA_SIZE] =
 "commands:\n\
 help\n\
-list\n\
 pwd\n\
 cd\n\
 ls\n\
@@ -72,22 +76,59 @@ void Server::handle_link(const SA_in &client_addr)
                                  AF_INET)->h_name;
     connect_data(remote_client);
     int command;
-    char data_client[DATA_SIZE];
+    char data_client[DATA_SIZE + 1];
     while(true)
     {
         robust_readn(command_fd, &command, sizeof(command));
         int reply = REQ_OK;
         int data_length = 0;
+        string ls_string;
         switch(command)
         {
         case FTP_HELP:
             robust_writen(command_fd, &reply, sizeof(reply));
             robust_writen(data_fd, help_text, DATA_SIZE);
+            break;
+        case FTP_LS:
+            if(robust_readn(data_fd, data_client, DATA_SIZE) == -1)
+            {
+                reply = REQ_ERR;
+                robust_writen(command_fd, &reply, sizeof(reply));
+            }
+            data_client[DATA_SIZE] = 0;
+            handle_ls(data_client);
+            break;
         default:
             reply = REQ_DENY;
             robust_writen(command_fd, &reply, sizeof(reply));
         }
     }
+}
+
+void Server::handle_ls(const char * data_client)
+{
+    char buf[DATA_SIZE];
+    buf[0] = 0;
+    const char * dir;
+    int reply = REQ_OK;
+    while(isspace(*data_client)) data_client++; 
+    sscanf(data_client, "%s", buf);
+    dir = buf[0] ? buf : ".";
+    string ls_string;
+    try
+    {
+        ls_string = get_dir_content(dir);
+    }
+    catch(FSException & e)
+    {
+        reply = REQ_UNFOUND;
+        robust_writen(command_fd, &reply, sizeof(reply));
+        return;
+    }
+    robust_writen(command_fd, &reply, sizeof(reply));
+    int length = ls_string.size() + 1;
+    robust_writen(data_fd, &length, sizeof(length));
+    robust_writen(data_fd, ls_string.c_str(), ls_string.size() + 1);
 }
 
 void Server::connect_data(const char * remote_client)

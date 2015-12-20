@@ -22,6 +22,7 @@ public:
 private:
     void handle_link(const SA_in & client_addr);
     void connect_data(const char * remote_client);
+    void handle_ls(const char * data_client);
 
     bool is_daemon;
     unsigned short port;

@@ -85,7 +85,7 @@ int robust_readn(int fd, void * buf, unsigned n)
     return int(n - num_left);
 }
 
-int robust_writen(int fd, void * buf, unsigned n)
+int robust_writen(int fd, const void * buf, unsigned n)
 {
     int num_left = n;
     char * bufp = (char *)buf;
