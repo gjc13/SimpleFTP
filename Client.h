@@ -19,7 +19,9 @@ private:
     const char * server_name;
     void clear_input(char * input);
     int handle_show();
-    int handle_ls(const char * command);
+    int handle_ls();
+    int handle_get(const char * filename);
+    int handle_put(const char * filename);
     void err_common(int reply);
     unsigned short server_port;
     int command_fd;

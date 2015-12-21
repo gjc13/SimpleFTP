@@ -24,6 +24,8 @@ private:
     void connect_data(const char * remote_client);
     void handle_ls(const char * data_client);
     void handle_cd(const char * data_client);
+    void handle_put(const char * data_client);
+    void handle_get(const char * data_client);
 
     bool is_daemon;
     unsigned short port;

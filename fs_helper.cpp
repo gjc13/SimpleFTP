@@ -1,6 +1,9 @@
 #include "fs_helper.h"
 #include <cstdio>
 #include <dirent.h>
+#include "definitions.h"
+#include <fcntl.h>
+#include "net_helper.h"
 
 using std::string;
 
@@ -29,5 +32,36 @@ std::string get_dir_content(const char * dir_name)
         ls_string.append("\x1b[0m");
     }
     return ls_string;
+}
+
+void send_to_socket(int sock_fd, int file_fd)
+{
+    char buf[DATA_SIZE];
+    while(true)
+    {
+        int num_read = read(file_fd, buf, DATA_SIZE);
+        robust_writen(sock_fd, &num_read, sizeof(num_read));
+        if(num_read > 0)
+        {
+            robust_writen(sock_fd, buf, num_read);
+        }
+        if(num_read < DATA_SIZE) break;
+    }
+}
+
+void recv_from_socket(int sock_fd, int file_fd)
+{
+    char buf[DATA_SIZE];
+    while(true)
+    {
+        int num_to_write; 
+        robust_readn(sock_fd, &num_to_write, sizeof(num_to_write));
+        if(num_to_write > 0)
+        {
+            robust_readn(sock_fd, buf, num_to_write);
+            write(file_fd, buf, num_to_write);
+        }
+        if(num_to_write < DATA_SIZE) break;
+    }
 }
 

@@ -22,6 +22,7 @@ private:
 
 
 std::string get_dir_content(const char * dir_name);
-void cd_to(const char * dir_name);
+void send_to_socket(int sock_fd, int file_fd);
+void recv_from_socket(int sock_fd, int file_fd);
 
 #endif

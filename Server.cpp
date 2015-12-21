@@ -16,6 +16,7 @@
 #include "definitions.h"
 #include "fs_helper.h"
 #include <cctype>
+#include <fcntl.h>
 
 using std::string;
 
@@ -77,8 +78,8 @@ void Server::handle_link(const SA_in &client_addr)
                                  AF_INET)->h_name;
     connect_data(remote_client);
     int command;
-    char data_client[DATA_SIZE + 1];
     char buf[DATA_SIZE + 1];
+    char * data_client = buf;
     shutdown(listen_fd, SHUT_RDWR);
     listen_fd = -1;
     while(true)
@@ -89,6 +90,23 @@ void Server::handle_link(const SA_in &client_addr)
         string ls_string;
         switch(command)
         {
+        case FTP_CD:
+        case FTP_LS:
+        case FTP_PUT:
+        case FTP_GET:
+            if(robust_readn(data_fd, buf, DATA_SIZE) == -1)
+            {
+                reply = REQ_ERR;
+                robust_writen(command_fd, &reply, sizeof(reply));
+            }
+            buf[DATA_SIZE] = 0;
+            while(*data_client != 0 && isspace(*data_client)) data_client++; 
+            break;
+        default:
+            break;
+        }
+        switch(command)
+        {
         case FTP_HELP:
             printf("help\n");
             robust_writen(command_fd, &reply, sizeof(reply));
@@ -96,12 +114,6 @@ void Server::handle_link(const SA_in &client_addr)
             break;
         case FTP_LS:
             printf("ls\n");
-            if(robust_readn(data_fd, data_client, DATA_SIZE) == -1)
-            {
-                reply = REQ_ERR;
-                robust_writen(command_fd, &reply, sizeof(reply));
-            }
-            data_client[DATA_SIZE] = 0;
             handle_ls(data_client);
             break;
         case FTP_PWD:
@@ -112,13 +124,15 @@ void Server::handle_link(const SA_in &client_addr)
             break;
         case FTP_CD:
             printf("cd\n");
-            if(robust_readn(data_fd, data_client, DATA_SIZE) == -1)
-            {
-                reply = REQ_ERR;
-                robust_writen(command_fd, &reply, sizeof(reply));
-            }
-            data_client[DATA_SIZE] = 0;
             handle_cd(data_client);
+            break;
+        case FTP_PUT:
+            printf("put\n");
+            handle_put(data_client);
+            break;
+        case FTP_GET:
+            printf("get\n");
+            handle_get(data_client);
             break;
         case FTP_EXIT:
             printf("quit\n");
@@ -137,7 +151,6 @@ void Server::handle_ls(const char * data_client)
     buf[0] = 0;
     const char * dir;
     int reply = REQ_OK;
-    while(isspace(*data_client)) data_client++; 
     sscanf(data_client, "%s", buf);
     dir = buf[0] ? buf : ".";
     string ls_string;
@@ -161,17 +174,15 @@ void Server::handle_cd(const char * data_client)
 {
     char buf[DATA_SIZE];
     int reply = REQ_OK;
-    while(isspace(*data_client)) data_client++; 
-    printf("cd to%s\n", data_client);
     if(chdir(data_client) == -1)
     {
         switch(errno)
         {
         case EACCES:
-            printf("permission denied!\n");
-        case ENOENT:
-            printf("no such dir!\n");
             reply = REQ_DENY;
+            break;
+        case ENOENT:
+            reply = REQ_UNFOUND;
             break;
         default:
             reply = REQ_ERR;
@@ -182,6 +193,78 @@ void Server::handle_cd(const char * data_client)
     robust_writen(command_fd, &reply, sizeof(reply));
     getcwd(buf, DATA_SIZE);
     robust_writen(data_fd, buf, DATA_SIZE);
+}
+
+void Server::handle_put(const char * data_client)
+{
+    int reply = REQ_OK;
+    try
+    {
+        int file_fd = open(data_client, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+        char buf[DATA_SIZE];
+        if(file_fd < 0)
+        {
+            throw FSException("cannot open file");
+        }
+        robust_writen(command_fd, &reply, sizeof(reply));
+        recv_from_socket(data_fd, file_fd);
+        close(file_fd);
+        return;
+    }
+    catch(FSException & e)
+    {
+        fprintf(stderr, "%s\n", e.what());
+        switch(errno)
+        {
+        case EACCES:
+            reply = REQ_DENY;
+            break;
+        case ENOENT:
+            reply = REQ_UNFOUND;
+            break;
+        default:
+            reply = REQ_ERR;
+        }
+    }
+    robust_writen(command_fd, &reply, sizeof(reply));
+    return;
+}
+
+void Server::handle_get(const char * data_client)
+{
+    int reply = REQ_OK;
+    try
+    {
+        int file_fd = open(data_client, O_RDONLY);
+        char buf[DATA_SIZE];
+        if(file_fd < 0)
+        {
+            throw FSException("cannot open file");
+        }
+        robust_writen(command_fd, &reply, sizeof(reply));
+        send_to_socket(data_fd, file_fd);
+        close(file_fd);
+        return;
+    }
+    catch(FSException & e)
+    {
+        fprintf(stderr, "%s d\n", e.what());
+        switch(errno)
+        {
+        case EACCES:
+            reply = REQ_DENY;
+            break;
+        case ENOENT:
+            reply = REQ_UNFOUND;
+            break;
+        default:
+            reply = REQ_ERR;
+            break;
+        }
+    }
+    printf("send reply %d\n", reply);
+    robust_writen(command_fd, &reply, sizeof(reply));
+    return;
 }
 
 void Server::connect_data(const char * remote_client)

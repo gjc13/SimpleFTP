@@ -5,7 +5,10 @@
 #include "Client.h"
 #include <cstdio>
 #include <cstring>
+#include <fcntl.h>
 #include "definitions.h"
+#include "fs_helper.h"
+#include <cctype>
 
 Client::Client(const char *hostname, unsigned short port)
         : server_name(hostname), server_port(port),
@@ -39,6 +42,12 @@ void Client::connect()
         char command[DATA_SIZE + 1];
         int numRead = sscanf(input, "%s", command);
         int ftp_command;
+        char * data_client = input + strlen(command);
+        if(!strcmp(command, "ls") || !strcmp(command, "cd") ||
+                !strcmp(command, "get") || !strcmp(command, "put"))
+        {
+            while(*data_client != 0 && isspace(*data_client)) data_client++; 
+        }
         if(!strcmp(command, "help"))
         {
             ftp_command = FTP_HELP;
@@ -49,7 +58,8 @@ void Client::connect()
         {
             ftp_command = FTP_LS;
             robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
-            handle_ls(input + strlen(command));
+            robust_writen(data_fd, data_client, DATA_SIZE);
+            handle_ls();
         }
         else if(!strcmp(command, "pwd"))
         {
@@ -61,9 +71,20 @@ void Client::connect()
         {
             ftp_command = FTP_CD;
             robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
-            robust_writen(data_fd, input + strlen(command), DATA_SIZE);
+            robust_writen(data_fd, data_client, DATA_SIZE);
             printf("cd: ");
             handle_show();
+        }
+        else if(!strcmp(command, "get"))
+        {
+            ftp_command = FTP_GET;
+            robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
+            robust_writen(data_fd, data_client, DATA_SIZE);
+            handle_get(input + strlen(command));
+        }
+        else if(!strcmp(command, "put"))
+        {
+            handle_put(data_client);
         }
         else if(!strcmp(command, "quit"))
         {
@@ -95,18 +116,19 @@ int Client::handle_show()
     return -1;
 }
 
-int Client::handle_ls(const char * command_str)
+int Client::handle_ls()
 {
-    char buf[DATA_SIZE];
     int reply;
-    robust_writen(data_fd, (void *)command_str, DATA_SIZE);
     robust_readn(command_fd, &reply, sizeof(reply));
     if(reply == REQ_OK)
     {
         int to_read;
         robust_readn(data_fd, &to_read, sizeof(to_read));
-        robust_readn(data_fd, &buf, to_read);
-        printf("%s", buf);
+        char * buf = new char[to_read + 1];
+        robust_readn(data_fd, buf, to_read);
+        buf[to_read] = 0;
+        printf("%s\n", buf);
+        //delete [] buf;
     }
     else if(reply == REQ_UNFOUND)
     {
@@ -118,8 +140,80 @@ int Client::handle_ls(const char * command_str)
         err_common(reply);
         return -1;
     }
-    printf("\n");
     return 0;
+}
+
+int Client::handle_get(const char * filename)
+{
+    char buf[DATA_SIZE];
+    while(isspace(*filename)) filename++; 
+    try
+    {
+        int reply = REQ_ERR;
+        robust_readn(command_fd, &reply, sizeof(reply));
+        if(reply != REQ_OK)
+        {
+            err_common(reply);
+            return -1;
+        }
+        int file_fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666);
+        if(file_fd < 0)
+        {
+            throw FSException("cannot open file");
+        }
+        recv_from_socket(data_fd, file_fd);
+        close(file_fd);
+        return 0;
+    }
+    catch(FSException & e)
+    {
+        while(true)
+        {
+            int num_to_read;
+            robust_readn(data_fd, &num_to_read, sizeof(num_to_read));
+            if(num_to_read > 0)
+            {
+                robust_readn(data_fd, buf, num_to_read);
+            }
+            if(num_to_read < DATA_SIZE) break;
+        }
+        fprintf(stderr, "%s\n", e.what());
+    }
+    return -1;
+}
+
+int Client::handle_put(const char * filename)
+{
+
+    char buf[DATA_SIZE];
+    while(isspace(*filename)) filename++; 
+    int reply;
+    try
+    {
+        int file_fd = open(filename, O_RDONLY);
+        char buf[DATA_SIZE];
+        if(file_fd < 0)
+        {
+            throw FSException("cannot open file");
+        }
+        int ftp_command = FTP_PUT;
+        robust_writen(command_fd, &ftp_command, sizeof(ftp_command));
+        robust_writen(data_fd, filename, DATA_SIZE);
+        robust_readn(command_fd, &reply, sizeof(reply));
+        if(reply != REQ_OK)
+        {
+            err_common(reply);
+            return -1;
+        }
+        send_to_socket(data_fd, file_fd);
+        close(file_fd);
+        return 0;
+    }
+    catch(FSException & e)
+    {
+        fprintf(stderr, "%s\n", e.what());
+    }
+    return -1;
 }
 
 void Client::err_common(int reply)
